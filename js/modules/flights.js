@@ -18,9 +18,9 @@ Portal.register({
     const cards = routes.map(r => {
       const list = prices
         .filter(p => p.routeId === r.id)
-        .sort((a, b) => a.price - b.price);
+        .sort((a, b) => Number(a.price) - Number(b.price));
       const best = list[0];
-      const hit = best && best.price <= r.target;
+      const hit = best && Number(best.price) <= Number(r.target);
 
       return `
         <article class="card route-card ${hit ? 'hit' : ''}">
@@ -76,7 +76,7 @@ Portal.register({
         <p class="muted small">機場代碼是 3 個英文字母，例如 TPE 桃園、NRT 成田、HND 羽田、KIX 關西。</p>
       </section>`;
 
-    root.querySelector('#route-form').addEventListener('submit', async e => {
+    root.querySelector('#route-form').addEventListener('submit', Portal.action(async e => {
       e.preventDefault();
       const f = new FormData(e.target);
       await DataStore.add('routes', {
@@ -86,13 +86,13 @@ Portal.register({
         target: Number(f.get('target'))
       });
       this.render(root);
-    });
+    }));
 
     root.querySelectorAll('[data-remove]').forEach(btn =>
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', Portal.action(async () => {
         if (!confirm('確定不再追蹤這條航線？')) return;
         await DataStore.remove('routes', btn.dataset.remove);
         this.render(root);
-      }));
+      })));
   }
 });

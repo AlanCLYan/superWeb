@@ -6,7 +6,7 @@
 // =============================================
 const CONFIG = {
   // 第 3 步會拿到 Google Apps Script 的網址，貼在這裡
-  SHEET_API_URL: ''
+  SHEET_API_URL: 'https://script.google.com/macros/s/AKfycbwaiimN33G_-LdQKphJjleByRQZCqwuv3uVJuutzA4FBOoCZwaI-TALW3L-unpWxJlI1w/exec'
 };
 
 const DataStore = (() => {
@@ -75,7 +75,9 @@ const DataStore = (() => {
     if (isDemo()) return structuredClone(loadLocal()[sheet] || []);
     const res = await fetch(`${CONFIG.SHEET_API_URL}?sheet=${encodeURIComponent(sheet)}`);
     if (!res.ok) throw new Error(`讀取「${sheet}」失敗`);
-    return res.json();
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error(data.error || `讀取「${sheet}」失敗`);
+    return data;
   }
 
   async function add(sheet, row) {
@@ -100,15 +102,32 @@ const DataStore = (() => {
     await post({ action: 'remove', sheet, id });
   }
 
-  async function post(body) {
+  // 寫入密碼：第一次新增或刪除時會請你輸入，之後記在這台裝置的瀏覽器裡
+  const KEY_STORAGE = 'superWeb-write-key';
+  function getKey(forceAsk) {
+    let key = '';
+    try { key = localStorage.getItem(KEY_STORAGE) || ''; } catch { /* 忽略 */ }
+    if (!key || forceAsk) {
+      key = prompt(forceAsk ? '密碼不正確，請重新輸入寫入密碼：' : '請輸入寫入密碼（只需輸入一次）：') || '';
+      try { localStorage.setItem(KEY_STORAGE, key); } catch { /* 忽略 */ }
+    }
+    return key;
+  }
+
+  async function post(body, retried = false) {
+    const key = getKey(retried);
+    if (!key) throw new Error('未輸入寫入密碼');
     // 用 text/plain 送出，Google Apps Script 才不會被瀏覽器的跨網域檢查擋下
     const res = await fetch(CONFIG.SHEET_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(body)
+      body: JSON.stringify({ ...body, key })
     });
     if (!res.ok) throw new Error('寫入失敗');
-    return res.json();
+    const result = await res.json();
+    if (result.error === 'unauthorized' && !retried) return post(body, true);
+    if (!result.ok) throw new Error(result.error === 'unauthorized' ? '寫入密碼不正確' : result.error);
+    return result;
   }
 
   // 清除示範模式下你做的修改，回到原始示範資料

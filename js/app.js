@@ -84,10 +84,21 @@ const Portal = (() => {
     window.scrollTo(0, 0);
   }
 
+  // 包住新增、刪除等動作：失敗時跳出提示，而不是默默沒反應
+  function action(fn) {
+    return async (...args) => {
+      try {
+        await fn(...args);
+      } catch (err) {
+        alert(`操作失敗：${err.message}`);
+      }
+    };
+  }
+
   function start() {
     window.addEventListener('hashchange', route);
     route();
   }
 
-  return { register, start, esc, timeAgo, demoBanner };
+  return { register, start, esc, timeAgo, demoBanner, action };
 })();

@@ -91,7 +91,7 @@ Portal.register({
       this.render(root);
     });
 
-    root.querySelector('#watch-form').addEventListener('submit', async e => {
+    root.querySelector('#watch-form').addEventListener('submit', Portal.action(async e => {
       e.preventDefault();
       const f = new FormData(e.target);
       await DataStore.add('watchlist', {
@@ -100,12 +100,12 @@ Portal.register({
         market: f.get('market')
       });
       this.render(root);
-    });
+    }));
 
     root.querySelectorAll('[data-unwatch]').forEach(btn =>
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', Portal.action(async () => {
         await DataStore.remove('watchlist', btn.dataset.unwatch);
         this.render(root);
-      }));
+      })));
   }
 });
