@@ -214,3 +214,19 @@ summary { cursor: pointer; color: var(--accent); }
 .form-card > p.muted.small { margin: 6px 0 0; }
 .price-row { flex-wrap: wrap; }
 .price, .price-row .tag, .trend { white-space: nowrap; }
+
+/* ---------- 股市新聞：第 5 步新增 ---------- */
+.search { width: 200px; flex: 0 1 200px; }
+.day-head {
+  font-weight: 600; font-size: .9rem; color: var(--muted);
+  margin: 10px 0 -2px; padding-left: 2px; list-style: none;
+}
+.day-head:first-child { margin-top: 0; }
+.btn-ghost { background: var(--surface); color: var(--accent); border: 1px solid var(--border); }
+.btn-ghost:hover { filter: none; background: var(--accent-soft); }
+.more { text-align: center; margin-top: 16px; }
+.credit { text-align: center; margin-top: 24px; }
+@media (max-width: 560px) {
+  .search { flex: 1 1 100%; width: 100%; order: 3; }
+}
+.warn + .card, .warn + .grid { margin-top: 16px; }
