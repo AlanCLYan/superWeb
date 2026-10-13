@@ -1,16 +1,15 @@
 // =============================================
 // 資料層：網站所有讀寫都經過這裡
-// 目前是「示範模式」，資料只存在你的瀏覽器裡。
-// 第 3 步接上 Google 試算表後，只要把下面的網址填進去，
-// 各功能模組完全不用改。
+// SHEET_API_URL 有填：讀寫 Google 試算表
+// SHEET_API_URL 留空：示範模式，資料只存在你的瀏覽器裡
 // =============================================
 const CONFIG = {
-  // 第 3 步會拿到 Google Apps Script 的網址，貼在這裡
+  // Google Apps Script 的網址（/exec 結尾）
   SHEET_API_URL: 'https://script.google.com/macros/s/AKfycbwaiimN33G_-LdQKphJjleByRQZCqwuv3uVJuutzA4FBOoCZwaI-TALW3L-unpWxJlI1w/exec'
 };
 
 const DataStore = (() => {
-  const STORAGE_KEY = 'superWeb-demo-v1';
+  const STORAGE_KEY = 'superWeb-demo-v2';
   const now = Date.now();
   const hoursAgo = h => new Date(now - h * 3600000).toISOString();
   const daysLater = d => new Date(now + d * 86400000).toISOString().slice(0, 10);
@@ -18,21 +17,26 @@ const DataStore = (() => {
   // ---------- 示範資料（每個工作表一組） ----------
   const demo = {
     routes: [
-      { id: 'r1', from: 'TPE', to: 'NRT', toName: '東京成田', target: 8000 },
-      { id: 'r2', from: 'TPE', to: 'KIX', toName: '大阪關西', target: 7000 },
-      { id: 'r3', from: 'TPE', to: 'ICN', toName: '首爾仁川', target: 6500 },
-      { id: 'r4', from: 'TPE', to: 'BKK', toName: '曼谷', target: 7500 }
+      { id: 'r1', from: 'TPE', to: 'NRT', toName: '東京成田', target: 8000, mode: 'date', departDate: daysLater(21), returnDate: daysLater(26) },
+      { id: 'r2', from: 'TPE', to: 'KIX', toName: '大阪關西', target: 7000, mode: 'month', month: daysLater(45).slice(0, 7), duration: 'week' },
+      { id: 'r3', from: 'TPE', to: 'ICN', toName: '首爾仁川', target: 6500, mode: 'date', departDate: daysLater(28), returnDate: '' }
     ],
     prices: [
-      { routeId: 'r1', airline: '台灣虎航', depart: daysLater(21), price: 7290, fetchedAt: hoursAgo(2) },
-      { routeId: 'r1', airline: '星宇航空', depart: daysLater(21), price: 11850, fetchedAt: hoursAgo(2) },
-      { routeId: 'r1', airline: '樂桃航空', depart: daysLater(35), price: 7980, fetchedAt: hoursAgo(8) },
-      { routeId: 'r2', airline: '樂桃航空', depart: daysLater(14), price: 7650, fetchedAt: hoursAgo(3) },
-      { routeId: 'r2', airline: '中華航空', depart: daysLater(14), price: 12400, fetchedAt: hoursAgo(3) },
-      { routeId: 'r3', airline: '德威航空', depart: daysLater(28), price: 5890, fetchedAt: hoursAgo(5) },
-      { routeId: 'r3', airline: '長榮航空', depart: daysLater(28), price: 10200, fetchedAt: hoursAgo(5) },
-      { routeId: 'r4', airline: '越捷航空', depart: daysLater(42), price: 8320, fetchedAt: hoursAgo(6) },
-      { routeId: 'r4', airline: '泰國航空', depart: daysLater(42), price: 11900, fetchedAt: hoursAgo(6) }
+      { routeId: 'r1', airline: '台灣虎航', depart: daysLater(21), returnDate: daysLater(26), price: 7290, stops: 0, fetchedAt: hoursAgo(2) },
+      { routeId: 'r1', airline: '星宇航空', depart: daysLater(21), returnDate: daysLater(26), price: 11850, stops: 0, fetchedAt: hoursAgo(2) },
+      { routeId: 'r1', airline: '樂桃航空', depart: daysLater(21), returnDate: daysLater(26), price: 7980, stops: 0, fetchedAt: hoursAgo(2) },
+      { routeId: 'r2', airline: '樂桃航空', depart: daysLater(47), returnDate: daysLater(54), price: 7650, stops: 0, fetchedAt: hoursAgo(3) },
+      { routeId: 'r2', airline: '中華航空', depart: daysLater(47), returnDate: daysLater(54), price: 12400, stops: 0, fetchedAt: hoursAgo(3) },
+      { routeId: 'r3', airline: '德威航空', depart: daysLater(28), returnDate: '', price: 3890, stops: 0, fetchedAt: hoursAgo(5) },
+      { routeId: 'r3', airline: '長榮航空', depart: daysLater(28), returnDate: '', price: 6200, stops: 0, fetchedAt: hoursAgo(5) }
+    ],
+    history: [
+      ...[8100, 7950, 7990, 7600, 7450, 7290].map((v, i) => ({ routeId: 'r1', date: hoursAgo((6 - i) * 24 + 2), minPrice: v })),
+      ...[7400, 7800, 7650].map((v, i) => ({ routeId: 'r2', date: hoursAgo((3 - i) * 24 + 3), minPrice: v }))
+    ],
+    meta: [
+      { id: 'flights.lastRun', value: hoursAgo(2) },
+      { id: 'flights.searchesLeft', value: '212' }
     ],
     watchlist: [
       { id: 'w1', symbol: '2330', name: '台積電', market: '台股' },
