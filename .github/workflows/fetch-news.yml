@@ -1,0 +1,31 @@
+name: 抓取股市新聞
+
+on:
+  schedule:
+    # 台灣時間每天 08:13～23:58，每 15 分鐘執行一次（每小時的 13、28、43、58 分）
+    # GitHub 使用 UTC 時間，台灣 = UTC+8，所以小時寫 0-15
+    - cron: '13,28,43,58 0-15 * * *'
+  # 允許在 GitHub 的 Actions 頁面手動按按鈕執行
+  workflow_dispatch:
+
+# 上一次還沒跑完時，不要同時再開一個
+concurrency:
+  group: fetch-news
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: 抓取新聞並寫入試算表
+        run: node scripts/fetch-news.mjs
+        env:
+          SHEET_API_URL: ${{ secrets.SHEET_API_URL }}
+          WRITE_KEY: ${{ secrets.WRITE_KEY }}
