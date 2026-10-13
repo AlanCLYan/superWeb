@@ -10,15 +10,33 @@ Portal.register({
   description: '追蹤想去的航線，價格低於目標時標示並寄信提醒。',
 
   formMode: 'date', // 新增表單目前選的模式
+  cache: null,
 
-  async render(root) {
+  // 首頁卡片上的摘要
+  async summary() {
+    const [routes, prices] = await Promise.all([DataStore.get('routes'), DataStore.get('prices')]);
+    const hits = routes.filter(r => {
+      const best = Math.min(...prices.filter(p => p.routeId === r.id).map(p => Number(p.price)));
+      return isFinite(best) && best <= Number(r.target);
+    });
+    if (!routes.length) return '還沒有追蹤航線';
+    return hits.length
+      ? `追蹤 ${routes.length} 條航線・<strong class="good">${hits.length} 條低於目標價</strong>`
+      : `追蹤 ${routes.length} 條航線・尚無低於目標價`;
+  },
+
+  // opts.reload = false：只切換畫面，沿用已載入的資料（不重新讀取試算表）
+  async render(root, opts = {}) {
     const { esc, timeAgo, demoBanner } = Portal;
-    const [routes, prices, history, meta] = await Promise.all([
-      DataStore.get('routes'),
-      DataStore.get('prices'),
-      DataStore.get('history').catch(() => []),
-      DataStore.get('meta').catch(() => [])
-    ]);
+    if (opts.reload !== false || !this.cache) {
+      this.cache = await Promise.all([
+        DataStore.get('routes'),
+        DataStore.get('prices'),
+        DataStore.get('history').catch(() => []),
+        DataStore.get('meta').catch(() => [])
+      ]);
+    }
+    const [routes, prices, history, meta] = this.cache;
 
     const money = n => `NT$ ${Number(n).toLocaleString('zh-TW')}`;
     const DURATION_LABEL = { oneway: '單程', weekend: '週末', week: '一週', twoweeks: '兩週' };
@@ -195,7 +213,7 @@ Portal.register({
     root.querySelectorAll('[data-mode]').forEach(btn =>
       btn.addEventListener('click', () => {
         this.formMode = btn.dataset.mode;
-        this.render(root);
+        this.render(root, { reload: false });
       }));
 
     root.querySelector('#route-form').addEventListener('submit', Portal.action(async e => {

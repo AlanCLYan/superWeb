@@ -12,6 +12,19 @@ Portal.register({
 
   cache: null,
 
+  // 首頁卡片上的摘要
+  async summary() {
+    const [watchlist, news] = await Promise.all([DataStore.get('watchlist'), DataStore.get('news')]);
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+    const todays = news.filter(n => new Date(n.publishedAt).toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }) === today);
+    const symbols = new Set(watchlist.map(w => String(w.symbol).toUpperCase()));
+    const names = watchlist.map(w => w.name).filter(Boolean);
+    const watched = todays.filter(n =>
+      String(n.symbols || '').split(',').some(s => symbols.has(s.trim().toUpperCase()))
+      || names.some(name => String(n.title).includes(name)));
+    return `今天 ${todays.length} 則新聞` + (watched.length ? `・<strong class="good">自選股相關 ${watched.length} 則</strong>` : '');
+  },
+
   // opts.reload = false：只改篩選條件，沿用已載入的資料（不重新讀取試算表）
   async render(root, opts = {}) {
     const { esc, timeAgo, demoBanner } = Portal;

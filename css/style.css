@@ -230,3 +230,10 @@ summary { cursor: pointer; color: var(--accent); }
   .search { flex: 1 1 100%; width: 100%; order: 3; }
 }
 .warn + .card, .warn + .grid { margin-top: 16px; }
+
+/* ---------- 首頁：第 6 步新增 ---------- */
+.module-summary {
+  margin-top: 12px !important; padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: .85rem; color: var(--text) !important;
+}
+.good { color: var(--good); }
