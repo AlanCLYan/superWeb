@@ -1,0 +1,26 @@
+name: 抓取機票價格
+
+on:
+  schedule:
+    # 每天台灣時間早上 6:17 執行（GitHub 使用 UTC 時間，22:17 UTC = 台灣 06:17）
+    - cron: '17 22 * * *'
+  # 允許在 GitHub 的 Actions 頁面手動按按鈕執行
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 抓取價格並寫入試算表
+        run: node scripts/fetch-flights.mjs
+        env:
+          SHEET_API_URL: ${{ secrets.SHEET_API_URL }}
+          WRITE_KEY: ${{ secrets.WRITE_KEY }}
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
