@@ -5,7 +5,7 @@ Portal.register({
   id: 'stocks',
   name: '股市新聞',
   icon: '📈',
-  description: '台股、美股焦點新聞每小時自動更新，自選股相關新聞優先標示。',
+  description: '台股、美股焦點新聞每 15 分鐘自動更新，自選股相關新聞優先標示。',
 
   // 記住目前的篩選條件（切換頁面回來時保留）
   filter: { market: '全部', onlyWatch: false, keyword: '', limit: 50 },
@@ -100,7 +100,7 @@ Portal.register({
         <h1>📈 股市焦點新聞</h1>
         <p class="muted">${all.length} 則</p>
       </div>
-      <p class="muted small status-line">${lastRun ? `上次自動更新：${timeAgo(lastRun)}・每小時更新（08:41～23:41）` : '尚未執行過自動抓取'}</p>
+      <p class="muted small status-line">${lastRun ? `上次自動更新：${timeAgo(lastRun)}・每 15 分鐘更新（08:13～23:58）` : '尚未執行過自動抓取'}</p>
       ${/全部來源失敗/.test(lastMessage) ? `<p class="warn small">新聞抓取失敗：${esc(lastMessage)}</p>` : ''}
 
       <section class="card">
