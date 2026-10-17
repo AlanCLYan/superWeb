@@ -11,6 +11,8 @@
 //   WRITE_KEY      寫入密碼
 // =============================================
 
+import { createSheet, run } from './lib/sheet.mjs';
+
 const {
   SHEET_API_URL,
   WRITE_KEY,
@@ -62,10 +64,18 @@ function parseRss(xml) {
   }));
 }
 
+// 讀取 RSS，失敗時等 5 秒再試一次
 async function fetchFeed(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (superWeb personal news reader)' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return parseRss(await res.text());
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (superWeb personal news reader)' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return parseRss(await res.text());
+    } catch (err) {
+      if (attempt >= 2) throw err;
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
 }
 
 // Google 新聞的標題結尾是「 - 來源」，拆開成標題與來源
@@ -82,29 +92,6 @@ function splitTitle(item, fallbackSource) {
 
 // 用來判斷是否為同一則新聞（去掉空白與標點）
 const normalize = s => s.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
-
-// ---------- 試算表 ----------
-async function sheetGet(sheet) {
-  const res = await fetch(`${SHEET_API_URL}?sheet=${sheet}`);
-  const data = await res.json();
-  if (!Array.isArray(data)) throw new Error(`讀取 ${sheet} 失敗：${data.error || res.status}`);
-  return data;
-}
-
-async function sheetPost(body) {
-  const res = await fetch(SHEET_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ ...body, key: WRITE_KEY })
-  });
-  const data = await res.json();
-  if (!data.ok) {
-    throw new Error(data.error === 'unauthorized'
-      ? '寫入密碼不正確，請檢查 GitHub Secrets 的 WRITE_KEY'
-      : `寫入失敗：${data.error}`);
-  }
-  return data;
-}
 
 // ---------- 自選股比對 ----------
 function matcher(watchlist) {
@@ -133,11 +120,8 @@ function stockQuery(w) {
 
 // ---------- 主程式 ----------
 async function main() {
-  for (const [k, v] of Object.entries({ SHEET_API_URL, WRITE_KEY })) {
-    if (!v) throw new Error(`缺少設定 ${k}，請到 GitHub → Settings → Secrets 新增`);
-  }
-
-  const [watchlist, existing] = await Promise.all([sheetGet('watchlist'), sheetGet('news')]);
+  const sheet = createSheet({ url: SHEET_API_URL, key: WRITE_KEY });
+  const [watchlist, existing] = await Promise.all([sheet.get('watchlist'), sheet.get('news')]);
   const seen = new Set(existing.map(n => normalize(n.title)));
   const match = matcher(watchlist);
   const freshLimit = Date.now() - FRESH_HOURS * 3600000;
@@ -188,14 +172,14 @@ async function main() {
 
   // 依時間由舊到新寫入
   fresh.sort((a, b) => a.publishedAt.localeCompare(b.publishedAt));
-  if (fresh.length) await sheetPost({ action: 'addMany', sheet: 'news', rows: fresh });
+  if (fresh.length) await sheet.post({ action: 'addMany', sheet: 'news', rows: fresh });
 
   const before = new Date(Date.now() - KEEP_DAYS * 86400000).toISOString();
-  const { removed } = await sheetPost({ action: 'deleteBefore', sheet: 'news', field: 'publishedAt', before });
+  const { removed } = await sheet.post({ action: 'deleteBefore', sheet: 'news', field: 'publishedAt', before });
 
   const nowIso = new Date().toISOString();
-  await sheetPost({ action: 'upsert', sheet: 'meta', row: { id: 'news.lastRun', value: nowIso, updatedAt: nowIso } });
-  await sheetPost({
+  await sheet.post({ action: 'upsert', sheet: 'meta', row: { id: 'news.lastRun', value: nowIso, updatedAt: nowIso } });
+  await sheet.post({
     action: 'upsert', sheet: 'meta',
     row: { id: 'news.lastMessage', value: errors.length === tasks.length
       ? `全部來源失敗：${errors.join('；')}`
@@ -203,10 +187,7 @@ async function main() {
   });
 
   console.log(`完成：新增 ${fresh.length} 則，清除 ${removed} 則舊新聞，失敗來源 ${errors.length} 個`);
-  if (errors.length === tasks.length) process.exitCode = 1; // 全部來源都失敗才標示失敗
+  // 就算全部來源都失敗也不標示為失敗：網站新聞頁會顯示警告，下次排程會自動再試
 }
 
-main().catch(err => {
-  console.error(`執行失敗：${err.message}`);
-  process.exitCode = 1;
-});
+run(main, { strict: false });

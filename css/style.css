@@ -15,6 +15,9 @@
   --warn-border: #f0d68a;
   --radius: 12px;
   --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 2px 8px rgba(0, 0, 0, .04);
+  --logo-tile: #22305A;
+  --logo-tile-low: #1A2647;
+  --logo-seam: #0C1326;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -31,6 +34,9 @@
     --warn-soft: #2e2814;
     --warn-border: #5c4d1e;
     --shadow: none;
+    --logo-tile: #34446C;
+    --logo-tile-low: #2B3A5E;
+    --logo-seam: #141C30;
   }
 }
 
@@ -61,9 +67,16 @@ h3 { font-size: 1rem; }
   max-width: 1080px; margin: 0 auto; padding: 0 16px;
   display: flex; align-items: center; gap: 24px; height: 56px;
 }
-.brand { font-weight: 700; font-size: 1.2rem; color: var(--text); }
-.brand span { color: var(--accent); }
+.brand { display: flex; align-items: center; flex-shrink: 0; border-radius: 6px; }
 .brand:hover { text-decoration: none; }
+.brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+/* Logo：翻牌字卡（顏色跟著淺色／深色模式切換） */
+.logo { display: block; height: 28px; width: auto; }
+.logo .t  { fill: var(--logo-tile); }
+.logo .tl { fill: var(--logo-tile-low); }
+.logo .s  { fill: var(--logo-seam); }
+.logo .k  { fill: #F4F6FA; }
+.logo .w  { fill: var(--accent); }
 .nav { display: flex; gap: 4px; overflow-x: auto; }
 .nav a {
   padding: 6px 12px; border-radius: 8px; color: var(--muted); white-space: nowrap;
@@ -191,6 +204,7 @@ summary { cursor: pointer; color: var(--accent); }
 
 @media (max-width: 560px) {
   .topbar-inner { gap: 12px; }
+  .logo { height: 22px; }
   input, select { width: 100%; }
   .form-row label { flex: 1 1 45%; }
 }
@@ -237,3 +251,7 @@ summary { cursor: pointer; color: var(--accent); }
   font-size: .85rem; color: var(--text) !important;
 }
 .good { color: var(--good); }
+
+/* ---------- 外部網站入口 ---------- */
+.ext { font-size: .8em; opacity: .7; margin-left: 2px; }
+.module-card.external .module-summary { color: var(--muted) !important; }

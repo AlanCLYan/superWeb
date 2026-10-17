@@ -14,6 +14,8 @@
 //   SERPAPI_KEY    SerpApi 金鑰
 // =============================================
 
+import { createSheet, run, ConfigError } from './lib/sheet.mjs';
+
 const {
   SHEET_API_URL,
   WRITE_KEY,
@@ -40,29 +42,6 @@ function monthsAhead(ym) {
   const [y, m] = ym.split('-').map(Number);
   const [ty, tm] = todayTW().split('-').map(Number);
   return (y - ty) * 12 + (m - tm);
-}
-
-// ---------- 試算表 ----------
-async function sheetGet(sheet) {
-  const res = await fetch(`${SHEET_API_URL}?sheet=${sheet}`);
-  const data = await res.json();
-  if (!Array.isArray(data)) throw new Error(`讀取 ${sheet} 失敗：${data.error || res.status}`);
-  return data;
-}
-
-async function sheetPost(body) {
-  const res = await fetch(SHEET_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ ...body, key: WRITE_KEY })
-  });
-  const data = await res.json();
-  if (!data.ok) {
-    throw new Error(data.error === 'unauthorized'
-      ? '寫入密碼不正確，請檢查 GitHub Secrets 的 WRITE_KEY'
-      : `寫入失敗：${data.error}`);
-  }
-  return data;
 }
 
 // ---------- SerpApi ----------
@@ -172,13 +151,12 @@ function describe(route) {
 
 // ---------- 主程式 ----------
 async function main() {
-  for (const [k, v] of Object.entries({ SHEET_API_URL, WRITE_KEY, SERPAPI_KEY })) {
-    if (!v) throw new Error(`缺少設定 ${k}，請到 GitHub → Settings → Secrets 新增`);
-  }
+  const sheet = createSheet({ url: SHEET_API_URL, key: WRITE_KEY });
+  if (!SERPAPI_KEY) throw new ConfigError('缺少設定 SERPAPI_KEY，請到 GitHub → Settings → Secrets 新增');
 
   const today = todayTW();
   const nowIso = new Date().toISOString();
-  const [routes, history] = await Promise.all([sheetGet('routes'), sheetGet('history')]);
+  const [routes, history] = await Promise.all([sheet.get('routes'), sheet.get('history')]);
 
   let left = await searchesLeft();
   console.log(`共 ${routes.length} 條航線，SerpApi 剩餘次數：${left ?? '未知'}`);
@@ -208,7 +186,7 @@ async function main() {
         .slice(0, KEEP_PER_ROUTE)
         .map(r => ({ ...r, routeId: route.id, fetchedAt: nowIso }));
 
-      await sheetPost({ action: 'replaceWhere', sheet: 'prices', field: 'routeId', value: route.id, rows });
+      await sheet.post({ action: 'replaceWhere', sheet: 'prices', field: 'routeId', value: route.id, rows });
 
       if (!rows.length) {
         console.log(`${describe(route)}：查無航班`);
@@ -222,7 +200,7 @@ async function main() {
         .sort((a, b) => a.date.localeCompare(b.date));
       const prev = past.length ? Number(past[past.length - 1].minPrice) : null;
 
-      await sheetPost({ action: 'add', sheet: 'history', row: { routeId: route.id, date: nowIso, minPrice: best.price } });
+      await sheet.post({ action: 'add', sheet: 'history', row: { routeId: route.id, date: nowIso, minPrice: best.price } });
 
       const change = prev == null ? '' : best.price < prev ? `（↓ ${money(prev - best.price)}）` : best.price > prev ? `（↑ ${money(best.price - prev)}）` : '（持平）';
       console.log(`${describe(route)}：最低 ${money(best.price)} ${best.airline}${change}`);
@@ -248,19 +226,19 @@ async function main() {
   if (left != null) left = Math.max(0, left - calls);
 
   // 記錄這次執行的狀態，網站會顯示
-  await sheetPost({ action: 'upsert', sheet: 'meta', row: { id: 'flights.lastRun', value: nowIso, updatedAt: nowIso } });
-  await sheetPost({ action: 'upsert', sheet: 'meta', row: { id: 'flights.searchesLeft', value: left ?? '', updatedAt: nowIso } });
-  await sheetPost({
+  await sheet.post({ action: 'upsert', sheet: 'meta', row: { id: 'flights.lastRun', value: nowIso, updatedAt: nowIso } });
+  await sheet.post({ action: 'upsert', sheet: 'meta', row: { id: 'flights.searchesLeft', value: left ?? '', updatedAt: nowIso } });
+  await sheet.post({
     action: 'upsert', sheet: 'meta',
     row: { id: 'flights.lastMessage', value: errors.length ? `${errors.length} 條航線查詢失敗：${errors.join('；')}` : `成功查詢 ${success} 條航線`, updatedAt: nowIso }
   });
 
   // 清除太舊的價格紀錄
   const before = new Date(Date.now() - HISTORY_DAYS * 86400000).toISOString();
-  await sheetPost({ action: 'deleteBefore', sheet: 'history', field: 'date', before });
+  await sheet.post({ action: 'deleteBefore', sheet: 'history', field: 'date', before });
 
   if (alerts.length) {
-    await sheetPost({
+    await sheet.post({
       action: 'notify',
       subject: `✈️ superWeb 降價提醒：${alerts.length} 條航線達到目標價`,
       body: `以下航線的價格已達到你設定的目標：\n\n${alerts.join('\n')}\n— superWeb 自動通知`
@@ -273,7 +251,4 @@ async function main() {
   if (calls > 0 && success === 0) process.exitCode = 1;
 }
 
-main().catch(err => {
-  console.error(`執行失敗：${err.message}`);
-  process.exitCode = 1;
-});
+run(main); // 機票每天只跑一次，任何錯誤都標示失敗，讓 GitHub 寄信通知

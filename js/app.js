@@ -7,14 +7,15 @@
 //   name         顯示名稱
 //   icon         圖示（emoji）
 //   description  首頁卡片上的說明
-//   render(root) 必填，把頁面內容畫進 root
+//   render(root) 把頁面內容畫進 root（站內功能必填）
+//   url          外部網站網址：有填就變成「入口卡片」，點了另開分頁（此時不需要 render）
 //   summary()    選填，回傳一行文字顯示在首頁卡片上，例如「3 條航線達標」
 // =============================================
 const Portal = (() => {
   const modules = [];
 
   function register(mod) {
-    if (!mod.id || !mod.render) throw new Error('模組必須有 id 和 render');
+    if (!mod.id || !(mod.render || mod.url)) throw new Error('模組必須有 id，以及 render 或 url');
     if (modules.some(m => m.id === mod.id)) throw new Error(`模組 id 重複：${mod.id}`);
     modules.push(mod);
   }
@@ -62,8 +63,9 @@ const Portal = (() => {
     const nav = document.getElementById('nav');
     nav.innerHTML = [
       `<a href="#/" class="${activeId ? '' : 'active'}">首頁</a>`,
-      ...modules.map(m =>
-        `<a href="#/${m.id}" class="${m.id === activeId ? 'active' : ''}">${m.icon || ''} ${esc(m.name)}</a>`)
+      ...modules.map(m => m.url
+        ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">${m.icon || ''} ${esc(m.name)}<span class="ext" aria-label="（另開網站）">↗</span></a>`
+        : `<a href="#/${m.id}" class="${m.id === activeId ? 'active' : ''}">${m.icon || ''} ${esc(m.name)}</a>`)
     ].join('');
   }
 
@@ -87,11 +89,12 @@ const Portal = (() => {
       ${demoBanner()}
       <section class="module-grid">
         ${modules.map(m => `
-          <a class="module-card" href="#/${m.id}">
+          <a class="module-card ${m.url ? 'external' : ''}" href="${m.url ? esc(m.url) : `#/${m.id}`}"${m.url ? ' target="_blank" rel="noopener"' : ''}>
             <span class="module-icon">${m.icon || '📄'}</span>
-            <h2>${esc(m.name)}</h2>
+            <h2>${esc(m.name)}${m.url ? '<span class="ext" aria-label="（另開網站）">↗</span>' : ''}</h2>
             <p>${esc(m.description || '')}</p>
             ${m.summary ? `<p class="module-summary" data-summary="${esc(m.id)}">讀取中…</p>` : ''}
+            ${m.url && !m.summary ? `<p class="module-summary">${esc(new URL(m.url).host + new URL(m.url).pathname.replace(/\/$/, ''))}</p>` : ''}
           </a>`).join('')}
       </section>`;
 
@@ -111,16 +114,16 @@ const Portal = (() => {
   async function route() {
     const id = location.hash.replace(/^#\/?/, '').split('/')[0];
     const root = document.getElementById('app');
-    const mod = modules.find(m => m.id === id);
+    const mod = modules.find(m => m.id === id && m.render);
     renderNav(mod ? id : '');
 
     if (!mod) {
-      document.title = 'superWeb 萬用入口';
+      document.title = 'SUPER Web 萬用入口';
       renderHome(root);
       return;
     }
 
-    document.title = `${mod.name} · superWeb`;
+    document.title = `${mod.name} · SUPER Web`;
     root.innerHTML = '<p class="loading">載入中…</p>';
     try {
       await mod.render(root);

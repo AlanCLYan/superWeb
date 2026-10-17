@@ -1,9 +1,10 @@
-# superWeb 萬用入口網站
+# SUPER Web 萬用入口網站
 
-個人用的入口網站，目前有兩個功能：
+個人用的入口網站，目前有兩個功能，加上一個外部網站入口：
 
 - ✈️ **便宜機票**：追蹤航線價格（固定日期或彈性月份），每天自動查價，達到目標價時寄 Email 提醒
 - 📈 **股市新聞**：台股、美股焦點新聞每 15 分鐘自動更新，自選股相關新聞優先標示
+- 🧳 **旅遊行程**：連到獨立的 easytrip 網站（https://alanclyan.github.io/easytrip/），另開分頁
 
 網址：https://alanclyan.github.io/superWeb/
 
@@ -35,7 +36,8 @@
 ```
 superWeb/
 ├─ index.html                 網站入口（新增功能時要在這裡加一行 <script>）
-├─ favicon.png, icon-180.png  網站圖示
+├─ favicon.svg, favicon.png   瀏覽器分頁圖示（翻牌字卡「S」）
+├─ icon-180.png               iPhone「加入主畫面」圖示
 ├─ css/style.css              所有樣式（自動支援深色模式）
 ├─ js/
 │  ├─ data.js                 資料層：所有讀寫試算表的動作都在這裡（Apps Script 網址也在這）
@@ -43,10 +45,12 @@ superWeb/
 │  └─ modules/                ★ 每個功能一個檔案
 │     ├─ flights.js           便宜機票
 │     ├─ stocks.js            股市新聞
+│     ├─ links.js             外部網站入口（目前有 easytrip）
 │     └─ _template.js         新功能範本（不會載入）
 ├─ scripts/                   自動抓取程式（由 GitHub Actions 執行）
 │  ├─ fetch-flights.mjs
 │  ├─ fetch-news.mjs
+│  ├─ lib/sheet.mjs           共用：讀寫試算表（暫時性錯誤自動重試 3 次）
 │  └─ _template-fetch.mjs     抓取程式範本
 ├─ apps-script/Code.gs        Apps Script 程式備份（密碼已移除）
 └─ .github/workflows/         排程設定
@@ -157,7 +161,27 @@ jobs:
 
 ---
 
-## 四、日常維護
+## 四、加一個外部網站的入口
+
+不需要寫頁面，打開 `js/modules/links.js` 複製一段、改內容即可：
+
+```js
+Portal.register({
+  id: 'easytrip',                 // 英文代號，不能和其他模組重複
+  name: '旅遊行程',
+  icon: '🧳',
+  description: '和旅伴一起排每日行程、記住宿交通、勾行前清單。',
+  url: 'https://alanclyan.github.io/easytrip/'   // 有 url 就是入口卡片，點了另開分頁
+});
+```
+
+首頁卡片和導覽列會自動出現，並加上「↗」表示另開網站。
+
+## 五、Logo
+
+頁首 Logo 是寫在 `index.html` 裡的向量圖（翻牌字卡 SUPER＋藍色 Web），文字已轉成線條，任何裝置顯示都一樣。顏色在 `css/style.css` 的 `--logo-tile`、`--logo-tile-low`、`--logo-seam`，「Web」使用網站主色 `--accent`，深色模式會自動切換。
+
+## 六、日常維護
 
 | 情況 | 怎麼做 |
 |---|---|
@@ -179,11 +203,13 @@ jobs:
 
 ---
 
-## 五、疑難排解
+## 七、疑難排解
 
 - **網站顯示「載入失敗」**：打開 `你的 Apps Script 網址?sheet=routes`，應該看到一串資料。看到登入頁 → 部署時「誰可以存取」要選「所有人」
 - **新增資料時顯示「寫入密碼不正確」**：密碼和 Apps Script 第 13 行不一致；輸入錯誤時會自動再問一次
-- **Actions 出現紅色叉叉**：點進去看「抓取…」步驟最後幾行的錯誤訊息
+- **Actions 出現紅色叉叉**：點進 **fetch** → 展開「抓取…」步驟，看最後幾行的錯誤訊息
+  - 新聞排程遇到暫時性問題（網路、Apps Script 忙碌、新聞網站暫時擋掉）不會顯示失敗，下次會自動再試；只有設定錯誤才會出現紅色叉叉
+  - 機票每天只跑一次，任何錯誤都會顯示失敗並寄信，方便你知道當天沒有更新
   - `寫入密碼不正確` → 檢查 Secrets 的 `WRITE_KEY`
   - `缺少設定 …` → 對應的 Secret 沒有設定
   - `Invalid API key` → 檢查 `SERPAPI_KEY`
