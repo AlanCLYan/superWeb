@@ -79,25 +79,47 @@ const Portal = (() => {
     return '夜深了';
   }
 
-  // 農曆日期，例如「丙午年九月初八」（瀏覽器不支援時回傳空字串）
+  // 農曆日期，例如「丙午年九月初八」
+  // 使用內建的農曆月份表（2024–2060），不依賴瀏覽器，iPhone、Android、電腦結果都一樣。
+  // 表中每個字元代表一個農曆月：第幾月、是否閏月、大月（30 天）或小月（29 天）。
+  const LUNAR = {
+    base: Date.UTC(2024, 1, 10), // 2024-02-10 = 甲辰年正月初一
+    year: 2024,
+    table: 'ADEGJKNPQTVWBCFGILiNORTVWBCFGILMORTVXADEHIKNOQTVWBDFGJgKNOQTVWBDEHILMPQSVWBDEHJKNORSVWADFcHILNORSVWBCEHILNORTUXADEGJKNORTVsXADEGJKNORTUXBCFGILMORTUXBDEHIKjMORSVXBDEHIKNOQTUXBDEHILMPQSVWBDEHJgLMPQTUWBCFHILMPRSVWADEHILNORTUXADaEHILMPRSVXADEGJKMPRSVXBCFGILMkPQTVXBCFGILMORSVXBCFGJKNOQTUXBCFHIhKNOQTUXADFGJLMPQSVWBCFGJLMPRSVWADEdGJKNPQTVWBCEHIKNPQTVXADEGJKMPmRTVXADEGJKMPQTVXADFGILMORSVXADFGJKjMORSVWBDFGJKNOQTUXADFGJKNPQSVWBCFGfILNORTUWBCFGJKNORTVWBCEHIKNORTV'
+  };
+  const LUNAR_CODES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const LUNAR_MONTHS = ['正月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
+
   function lunarDate(d = new Date()) {
-    try {
-      const parts = new Intl.DateTimeFormat('zh-TW-u-ca-chinese', {
-        timeZone: 'Asia/Taipei', year: 'numeric', month: 'long', day: 'numeric'
-      }).formatToParts(d);
-      const get = type => (parts.find(p => p.type === type) || {}).value || '';
-      const n = Number(get('day'));
-      const digits = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
-      const day = n <= 10 ? `初${digits[n]}`
-        : n < 20 ? `十${digits[n - 10]}`
-        : n === 20 ? '二十'
-        : n < 30 ? `廿${digits[n - 20]}`
-        : '三十';
-      const yearName = get('yearName');
-      return n ? `${yearName ? `${yearName}年` : ''}${get('month')}${day}` : '';
-    } catch {
-      return '';
+    // 先取得台灣當地的年月日
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Taipei', year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(d);
+    const num = type => Number((parts.find(p => p.type === type) || {}).value);
+    let offset = Math.round((Date.UTC(num('year'), num('month') - 1, num('day')) - LUNAR.base) / 86400000);
+    if (!(offset >= 0)) return '';
+
+    let year = LUNAR.year;
+    for (let i = 0; i < LUNAR.table.length; i++) {
+      const v = LUNAR_CODES.indexOf(LUNAR.table[i]);
+      const len = 29 + (v & 1);
+      const code = v >> 1;
+      const leap = code >= 12;
+      const month = (code % 12) + 1;
+      if (i > 0 && month === 1 && !leap) year++;
+      if (offset < len) {
+        const n = offset + 1;
+        const digits = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+        const day = n <= 10 ? `初${digits[n]}`
+          : n < 20 ? `十${digits[n - 10]}`
+          : n === 20 ? '二十'
+          : n < 30 ? `廿${digits[n - 20]}`
+          : '三十';
+        const stem = '甲乙丙丁戊己庚辛壬癸'[(year - 4) % 10];
+        const branch = '子丑寅卯辰巳午未申酉戌亥'[(year - 4) % 12];
+        return `${stem}${branch}年${leap ? '閏' : ''}${LUNAR_MONTHS[month - 1]}${day}`;
+      }
+      offset -= len;
     }
+    return '';
   }
 
   const clockText = () => new Date().toLocaleTimeString('zh-TW', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hour12: false });
