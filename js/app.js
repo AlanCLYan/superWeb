@@ -92,7 +92,7 @@ const Portal = (() => {
           <a class="module-card ${m.url ? 'external' : ''}" href="${m.url ? esc(m.url) : `#/${m.id}`}"${m.url ? ' target="_blank" rel="noopener"' : ''}>
             <span class="module-icon">${m.icon || '📄'}</span>
             <h2>${esc(m.name)}${m.url ? '<span class="ext" aria-label="（另開網站）">↗</span>' : ''}</h2>
-            <p>${esc(m.description || '')}</p>
+            <p class="module-desc">${esc(m.description || '')}</p>
             ${m.summary ? `<p class="module-summary" data-summary="${esc(m.id)}">讀取中…</p>` : ''}
             ${m.url && !m.summary ? `<p class="module-summary">${esc(new URL(m.url).host + new URL(m.url).pathname.replace(/\/$/, ''))}</p>` : ''}
           </a>`).join('')}
@@ -133,7 +133,26 @@ const Portal = (() => {
     window.scrollTo(0, 0);
   }
 
+  // ---------- 手機版選單 ----------
+  function setupMenu() {
+    const bar = document.querySelector('.topbar');
+    const btn = document.getElementById('menu-btn');
+    if (!bar || !btn) return;
+    const setOpen = open => {
+      bar.classList.toggle('menu-open', open);
+      btn.setAttribute('aria-expanded', String(open));
+      btn.setAttribute('aria-label', open ? '關閉選單' : '開啟選單');
+    };
+    btn.addEventListener('click', () => setOpen(!bar.classList.contains('menu-open')));
+    // 點選單裡的項目、點選單外面、按 Esc、或切換頁面時，自動收起
+    document.getElementById('nav').addEventListener('click', e => { if (e.target.closest('a')) setOpen(false); });
+    document.addEventListener('click', e => { if (!bar.contains(e.target)) setOpen(false); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') setOpen(false); });
+    window.addEventListener('hashchange', () => setOpen(false));
+  }
+
   function start() {
+    setupMenu();
     window.addEventListener('hashchange', route);
     route();
   }
