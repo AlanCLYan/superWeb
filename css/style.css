@@ -147,7 +147,9 @@ h3 { font-size: 1rem; }
 
 /* ---------- 首頁 ---------- */
 .hero { margin: 8px 0 24px; }
-.hero p { color: var(--muted); margin: 4px 0 0; }
+.hero h1 { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.hero .clock { font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: .01em; color: var(--accent); }
+.hero p { color: var(--muted); margin: 4px 0 0; display: flex; flex-wrap: wrap; column-gap: 14px; }
 .module-grid {
   display: grid; gap: 16px;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -156,9 +158,9 @@ h3 { font-size: 1rem; }
   display: flex; flex-direction: column; color: var(--text);
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow);
-  transition: transform .15s, border-color .15s;
+  transition: border-color .15s;
 }
-.module-card:hover { text-decoration: none; transform: translateY(-2px); border-color: var(--accent); }
+.module-card:hover { text-decoration: none; border-color: var(--accent); }
 .module-card p { color: var(--muted); margin: 6px 0 0; font-size: .9rem; }
 .module-icon { font-size: 1.8rem; display: block; margin-bottom: 8px; }
 .module-card .module-desc { margin-bottom: 12px; }
@@ -295,3 +297,11 @@ summary { cursor: pointer; color: var(--accent); }
 /* ---------- 外部網站入口 ---------- */
 .ext { font-size: .8em; opacity: .7; margin-left: 2px; }
 .module-card.external .module-summary { color: var(--muted) !important; }
+
+/* 首頁卡片：同一排卡片的「圖示／標題／說明／摘要」各自對齊在同一高度
+   摘要第一行對齊，摘要較短的卡片下方留白（支援 subgrid 的瀏覽器） */
+@supports (grid-template-rows: subgrid) {
+  .module-card { display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: 0; }
+  .module-summary { margin-top: 0 !important; align-self: start; }
+}
+.module-summary.empty { border-top: 0; padding-top: 0; }

@@ -79,12 +79,53 @@ const Portal = (() => {
     return '夜深了';
   }
 
+  // 農曆日期，例如「丙午年九月初八」（瀏覽器不支援時回傳空字串）
+  function lunarDate(d = new Date()) {
+    try {
+      const parts = new Intl.DateTimeFormat('zh-TW-u-ca-chinese', {
+        timeZone: 'Asia/Taipei', year: 'numeric', month: 'long', day: 'numeric'
+      }).formatToParts(d);
+      const get = type => (parts.find(p => p.type === type) || {}).value || '';
+      const n = Number(get('day'));
+      const digits = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+      const day = n <= 10 ? `初${digits[n]}`
+        : n < 20 ? `十${digits[n - 10]}`
+        : n === 20 ? '二十'
+        : n < 30 ? `廿${digits[n - 20]}`
+        : '三十';
+      const yearName = get('yearName');
+      return n ? `${yearName ? `${yearName}年` : ''}${get('month')}${day}` : '';
+    } catch {
+      return '';
+    }
+  }
+
+  const clockText = () => new Date().toLocaleTimeString('zh-TW', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hour12: false });
+  const dateText = () => new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', month: 'long', day: 'numeric', weekday: 'long' });
+
+  // 首頁的時間每分鐘更新一次（離開首頁時停止）
+  let clockTimer = null;
+  function stopClock() {
+    clearTimeout(clockTimer);
+    clockTimer = null;
+  }
+  function tickClock(root) {
+    const hero = root.querySelector('.hero');
+    if (!hero) return stopClock();
+    hero.querySelector('.clock').textContent = clockText();
+    hero.querySelector('.greet').textContent = greeting();
+    hero.querySelector('.date').textContent = dateText();
+    const lunar = lunarDate();
+    hero.querySelector('.lunar').textContent = lunar ? `農曆${lunar}` : '';
+    clockTimer = setTimeout(() => tickClock(root), 60000 - (Date.now() % 60000) + 50);
+  }
+
   function renderHome(root) {
-    const date = new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', month: 'long', day: 'numeric', weekday: 'long' });
+    const lunar = lunarDate();
     root.innerHTML = `
       <section class="hero">
-        <h1>${greeting()}</h1>
-        <p>${date}</p>
+        <h1><time class="clock">${clockText()}</time><span class="greet">${greeting()}</span></h1>
+        <p><span class="date">${dateText()}</span><span class="lunar">${lunar ? `農曆${lunar}` : ''}</span></p>
       </section>
       ${demoBanner()}
       <section class="module-grid">
@@ -95,6 +136,7 @@ const Portal = (() => {
             <p class="module-desc">${esc(m.description || '')}</p>
             ${m.summary ? `<p class="module-summary" data-summary="${esc(m.id)}">讀取中…</p>` : ''}
             ${m.url && !m.summary ? `<p class="module-summary">${esc(new URL(m.url).host + new URL(m.url).pathname.replace(/\/$/, ''))}</p>` : ''}
+            ${!m.url && !m.summary ? '<p class="module-summary empty"></p>' : ''}
           </a>`).join('')}
       </section>`;
 
@@ -112,6 +154,7 @@ const Portal = (() => {
 
   // ---------- 頁面切換 ----------
   async function route() {
+    stopClock();
     const id = location.hash.replace(/^#\/?/, '').split('/')[0];
     const root = document.getElementById('app');
     const mod = modules.find(m => m.id === id && m.render);
@@ -120,6 +163,7 @@ const Portal = (() => {
     if (!mod) {
       document.title = 'SUPER Web 萬用入口';
       renderHome(root);
+      clockTimer = setTimeout(() => tickClock(root), 60000 - (Date.now() % 60000) + 50);
       return;
     }
 
