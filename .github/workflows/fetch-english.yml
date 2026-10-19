@@ -1,0 +1,25 @@
+name: 抓取每日英文文章
+
+on:
+  schedule:
+    # 每天台灣時間早上 06:37 執行（GitHub 使用 UTC 時間，22:37 UTC = 台灣 06:37）
+    - cron: '37 22 * * *'
+  # 允許在 GitHub 的 Actions 頁面手動按按鈕執行（想多讀一篇時也可以手動跑）
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: 抓取文章並寫入試算表
+        run: node scripts/fetch-english.mjs
+        env:
+          SHEET_API_URL: ${{ secrets.SHEET_API_URL }}
+          WRITE_KEY: ${{ secrets.WRITE_KEY }}
