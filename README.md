@@ -1,9 +1,10 @@
 # SUPER Web 萬用入口網站
 
-個人用的入口網站，目前有兩個功能，加上一個外部網站入口：
+個人用的入口網站，目前有三個功能，加上一個外部網站入口：
 
 - ✈️ **便宜機票**：追蹤航線價格（固定日期或彈性月份），每天自動查價，達到目標價時寄 Email 提醒
-- 📈 **股市新聞**：台股、美股焦點新聞每 15 分鐘自動更新，自選股相關新聞優先標示
+- 📈 **股市新聞**：台股、美股焦點新聞每 15 分鐘自動更新，自選股相關新聞優先標示，可用下拉選單只看某一檔自選股
+- 📖 **英文閱讀**：每天一篇英文文章（The Conversation），點單字查意思並存進單字庫；單字庫可手動新增，並提供字卡複習與測驗
 - 🧳 **旅遊行程**：連到獨立的 easytrip 網站（https://alanclyan.github.io/easytrip/），另開分頁
 
 網址：https://alanclyan.github.io/superWeb/
@@ -19,6 +20,7 @@
 └──────────────────────┘                └───────────────────────┘               └──────────────────────┘
   機票：每天 06:17                         routes / prices / history               你在手機、電腦上看資料
   新聞：08:13～23:58 每 15 分鐘             watchlist / news / meta                 新增航線、自選股
+  英文文章：每天 06:37                       articles / vocab                        查單字、複習、測驗
 ```
 
 | 角色 | 放在哪裡 | 費用 |
@@ -28,6 +30,8 @@
 | 自動抓取 | GitHub Actions | 公開儲存庫免費 |
 | 機票價格 | SerpApi（Google 航班） | 免費每月 250 次 |
 | 新聞 | Yahoo股市 RSS、Google 新聞 RSS | 免費 |
+| 英文文章 | The Conversation（CC BY-ND 4.0，可轉載全文，需標明作者並連回原文） | 免費 |
+| 查單字 | Free Dictionary API（英英）、MyMemory（中文翻譯）；發音用瀏覽器內建語音 | 免費 |
 
 ---
 
@@ -45,17 +49,20 @@ superWeb/
 │  └─ modules/                ★ 每個功能一個檔案
 │     ├─ flights.js           便宜機票
 │     ├─ stocks.js            股市新聞
+│     ├─ english.js           英文閱讀（閱讀查字、單字庫、複習、測驗）
 │     ├─ links.js             外部網站入口（目前有 easytrip）
 │     └─ _template.js         新功能範本（不會載入）
 ├─ scripts/                   自動抓取程式（由 GitHub Actions 執行）
 │  ├─ fetch-flights.mjs
 │  ├─ fetch-news.mjs
+│  ├─ fetch-english.mjs       每日英文文章
 │  ├─ lib/sheet.mjs           共用：讀寫試算表（暫時性錯誤自動重試 3 次）
 │  └─ _template-fetch.mjs     抓取程式範本
 ├─ apps-script/Code.gs        Apps Script 程式備份（密碼已移除）
 └─ .github/workflows/         排程設定
    ├─ fetch-flights.yml
-   └─ fetch-news.yml
+   ├─ fetch-news.yml
+   └─ fetch-english.yml
 ```
 
 ---
@@ -181,7 +188,15 @@ Portal.register({
 
 頁首 Logo 是寫在 `index.html` 裡的向量圖（翻牌字卡 SUPER＋藍色 Web），文字已轉成線條，任何裝置顯示都一樣。顏色在 `css/style.css` 的 `--logo-tile`、`--logo-tile-low`、`--logo-seam`，「Web」使用網站主色 `--accent`，深色模式會自動切換。
 
-## 六、日常維護
+## 六、英文閱讀怎麼運作
+
+- **文章**：每天 06:37 從 The Conversation 挑一篇 450～1600 字、還沒收錄過的最新文章，存進 `articles` 工作表，保留 30 天。想換分類，可以在排程檔加上環境變數 `ENGLISH_FEEDS`（例如 `https://theconversation.com/us/technology/articles.atom`）。想多讀一篇，就到 Actions 手動執行。
+- **授權**：閱讀頁會標示作者、原文連結與 CC BY-ND 4.0 授權，內容不做改寫，並保留 The Conversation 的瀏覽計數。
+- **單字庫**（`vocab` 工作表）：在文章中點單字加入，或在「單字庫」分頁手動新增（來源標為「生活」）。中文意思可以隨時修改。
+- **複習**：每個單字有熟練度 0～6。按「記得」會升一級，下次複習間隔依序為 1、2、4、7、15、30 天；按「不記得」或測驗答錯，會回到第 1 級，明天再複習。
+- **測驗**：最多 10 題，題型有「選中文」「選英文」「拼字」，優先出不熟的單字。需要至少 4 個有中文意思的單字。
+
+## 七、日常維護
 
 | 情況 | 怎麼做 |
 |---|---|
@@ -191,7 +206,7 @@ Portal.register({
 | 想手動更新 | GitHub → Actions → 選排程 → **Run workflow** |
 | 排程被暫停 | 公開儲存庫 60 天沒有任何更新，GitHub 會暫停排程（會先寄信）。到 Actions 頁面按 **Enable workflow** 即可 |
 | 修改 Apps Script 後網站沒變 | 一定要「部署 → 管理部署作業 → 編輯 → 新版本」 |
-| 上傳後網站沒變 | 等 1～2 分鐘，用無痕視窗或強制重新整理（Mac：Cmd+Shift+R） |
+| 上傳後網站沒變 | 等 1～2 分鐘，用無痕視窗或強制重新整理（Mac：Cmd+Shift+R）。更新了 js／css 時，記得把 `index.html` 裡所有 `?v=日期` 改成新日期，瀏覽器才不會混用新舊檔案 |
 
 ### GitHub Secrets 一覽
 
@@ -203,7 +218,7 @@ Portal.register({
 
 ---
 
-## 七、疑難排解
+## 八、疑難排解
 
 - **網站顯示「載入失敗」**：打開 `你的 Apps Script 網址?sheet=routes`，應該看到一串資料。看到登入頁 → 部署時「誰可以存取」要選「所有人」
 - **新增資料時顯示「寫入密碼不正確」**：密碼和 Apps Script 第 13 行不一致；輸入錯誤時會自動再問一次

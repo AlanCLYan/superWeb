@@ -28,11 +28,17 @@ const SCHEMA = {
   // 系統狀態（上次抓取時間、剩餘搜尋次數等）
   meta:      ['id', 'value', 'updatedAt'],
   watchlist: ['id', 'symbol', 'name', 'market'],
-  news:      ['id', 'market', 'title', 'source', 'link', 'symbols', 'publishedAt']
+  news:      ['id', 'market', 'title', 'source', 'link', 'symbols', 'publishedAt'],
+  // 英文閱讀：每日文章（body 是全文，段落之間以空行分隔）
+  articles:  ['id', 'title', 'author', 'source', 'url', 'publishedAt', 'fetchedAt', 'body', 'words', 'counter', 'readAt'],
+  // 英文閱讀：單字庫
+  //   box / nextReview：間隔複習用（box 越大代表越熟，nextReview 是下次該複習的日期）
+  vocab:     ['id', 'word', 'meaning', 'definition', 'phonetic', 'pos', 'example', 'source', 'sourceUrl',
+              'createdAt', 'box', 'nextReview', 'correct', 'wrong', 'lastReviewed']
 };
 
 // 這些欄位讀出來時轉成數字，其他一律當文字
-const NUMBER_FIELDS = ['target', 'price', 'minPrice', 'stops'];
+const NUMBER_FIELDS = ['target', 'price', 'minPrice', 'stops', 'words', 'box', 'correct', 'wrong'];
 
 // 刪除航線時，一併刪除這些工作表中屬於該航線的資料
 const ROUTE_CHILDREN = ['prices', 'history'];
@@ -127,6 +133,9 @@ function doPost(e) {
 
       case 'upsert': // 依 id 更新，沒有就新增
         return json_({ ok: true, row: upsert_(body.sheet, body.row) });
+
+      case 'upsertMany': // 一次更新多筆（例如測驗結束後更新多個單字）
+        return json_({ ok: true, rows: (body.rows || []).map(r => upsert_(body.sheet, r)) });
 
       case 'deleteBefore': // 清除舊資料：刪除某個時間欄位早於指定時間的列
         return json_({ ok: true, removed: deleteBefore_(body.sheet, body.field, body.before) });

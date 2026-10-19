@@ -8,7 +8,8 @@ Portal.register({
   description: '台股、美股焦點新聞每 15 分鐘自動更新，自選股相關新聞優先標示。',
 
   // 記住目前的篩選條件（切換頁面回來時保留）
-  filter: { market: '全部', onlyWatch: false, keyword: '', limit: 50 },
+  // watch：'' = 全部新聞、'*' = 所有自選股相關、其他 = 單一檔自選股代號
+  filter: { market: '全部', watch: '', keyword: '', limit: 50 },
 
   cache: null,
 
@@ -54,11 +55,13 @@ Portal.register({
         .map(w => w.symbol);
     };
 
+    if (this.filter.watch && this.filter.watch !== '*' && !watch.some(w => w.symbol === this.filter.watch)) this.filter.watch = '';
     const kw = this.filter.keyword.trim().toLowerCase();
     const all = news
       .map(n => ({ ...n, hits: related(n) }))
       .filter(n => this.filter.market === '全部' || n.market === this.filter.market)
-      .filter(n => !this.filter.onlyWatch || n.hits.length)
+      .filter(n => !this.filter.watch
+        || (this.filter.watch === '*' ? n.hits.length : n.hits.includes(this.filter.watch)))
       .filter(n => !kw || `${n.title} ${n.source}`.toLowerCase().includes(kw))
       .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
     const shown = all.slice(0, this.filter.limit);
@@ -133,9 +136,16 @@ Portal.register({
       <div class="toolbar">
         <div class="tabs">${tabs}</div>
         <input id="kw" class="search" type="search" placeholder="搜尋標題…" value="${esc(this.filter.keyword)}">
-        <label class="toggle">
-          <input type="checkbox" id="only-watch" ${this.filter.onlyWatch ? 'checked' : ''}>
-          只看自選股相關
+        <label class="watch-filter">
+          <span class="muted small">自選股</span>
+          <select id="watch-filter">
+            <option value="">全部新聞</option>
+            <option value="*" ${this.filter.watch === '*' ? 'selected' : ''}>所有自選股相關</option>
+            ${watch.map(w => {
+              const count = news.filter(n => related(n).includes(w.symbol)).length;
+              return `<option value="${esc(w.symbol)}" ${this.filter.watch === w.symbol ? 'selected' : ''}>${esc(w.symbol)} ${esc(w.name)}（${count}）</option>`;
+            }).join('')}
+          </select>
         </label>
       </div>
 
@@ -150,8 +160,8 @@ Portal.register({
         this.render(root, { reload: false });
       }));
 
-    root.querySelector('#only-watch').addEventListener('change', e => {
-      this.filter.onlyWatch = e.target.checked;
+    root.querySelector('#watch-filter').addEventListener('change', e => {
+      this.filter.watch = e.target.value;
       this.filter.limit = 50;
       this.render(root, { reload: false });
     });

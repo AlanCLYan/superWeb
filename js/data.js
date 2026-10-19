@@ -96,6 +96,31 @@ const DataStore = (() => {
     return row;
   }
 
+  // 依 id 更新整列（沒有就新增）
+  async function update(sheet, row) {
+    if (isDemo()) {
+      const data = loadLocal();
+      const list = (data[sheet] ||= []);
+      const i = list.findIndex(r => r.id === row.id);
+      if (i >= 0) list[i] = { ...list[i], ...row }; else list.push(row);
+      saveLocal();
+      return row;
+    }
+    await post({ action: 'upsert', sheet, row });
+    return row;
+  }
+
+  // 一次更新多列
+  async function updateMany(sheet, rows) {
+    if (!rows.length) return [];
+    if (isDemo()) {
+      for (const r of rows) await update(sheet, r);
+      return rows;
+    }
+    await post({ action: 'upsertMany', sheet, rows });
+    return rows;
+  }
+
   async function remove(sheet, id) {
     if (isDemo()) {
       const data = loadLocal();
@@ -140,5 +165,5 @@ const DataStore = (() => {
     saveLocal();
   }
 
-  return { get, add, remove, isDemo, resetDemo };
+  return { get, add, update, updateMany, remove, isDemo, resetDemo };
 })();
