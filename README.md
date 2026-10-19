@@ -31,7 +31,7 @@
 | 機票價格 | SerpApi（Google 航班） | 免費每月 250 次 |
 | 新聞 | Yahoo股市 RSS、Google 新聞 RSS | 免費 |
 | 英文文章 | The Conversation（CC BY-ND 4.0，可轉載全文，需標明作者並連回原文） | 免費 |
-| 查單字 | Free Dictionary API（英英）、MyMemory（中文翻譯）；發音用瀏覽器內建語音 | 免費 |
+| 查單字 | Free Dictionary API（英英，備援 Wiktionary）；中文翻譯用 Apps Script 內建的 Google 翻譯（備援 MyMemory）；發音用瀏覽器內建語音 | 免費 |
 
 ---
 

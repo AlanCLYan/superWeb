@@ -60,29 +60,85 @@
     return out;
   }
 
-  async function lookup(word) {
+  // 有逾時限制的 fetch：超過時間就放棄，不會一直卡住
+  async function fetchJSON(url, ms = 8000) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      let data = null;
+      try { data = await res.json(); } catch { /* 不是 JSON */ }
+      return { res, data };
+    } catch (err) {
+      throw new Error(err.name === 'AbortError' ? '連線逾時' : '無法連線');
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  const stripHtml = html => new DOMParser().parseFromString(String(html || ''), 'text/html').body.textContent.trim();
+
+  // 字典 1：Free Dictionary API（有音標）
+  async function lookupFreeDict(word) {
     for (const w of [word, ...stems(word)]) {
-      try {
-        const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(w)}`);
-        if (!res.ok) continue;
-        const data = await res.json();
-        const entry = data[0];
-        const phonetic = entry.phonetic || (entry.phonetics || []).map(p => p.text).find(Boolean) || '';
-        const meanings = (entry.meanings || []).slice(0, 3).map(m => ({
-          pos: m.partOfSpeech,
-          defs: (m.definitions || []).slice(0, 2).map(d => d.definition)
-        }));
-        return { headword: entry.word || w, phonetic, meanings };
-      } catch { /* 換下一個字形再試 */ }
+      const { res, data } = await fetchJSON(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(w)}`, 7000);
+      if (!res.ok || !Array.isArray(data)) continue;
+      const entry = data[0];
+      const phonetic = entry.phonetic || (entry.phonetics || []).map(p => p.text).find(Boolean) || '';
+      const meanings = (entry.meanings || []).slice(0, 3).map(m => ({
+        pos: m.partOfSpeech,
+        defs: (m.definitions || []).slice(0, 2).map(d => d.definition)
+      }));
+      return { headword: entry.word || w, phonetic, meanings };
     }
     return null;
   }
 
+  // 字典 2：Wiktionary（備援）
+  async function lookupWiktionary(word) {
+    for (const w of [word, ...stems(word)]) {
+      const { res, data } = await fetchJSON(`https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(w)}`, 7000);
+      if (!res.ok || !data || !Array.isArray(data.en)) continue;
+      const meanings = data.en.slice(0, 3).map(m => ({
+        pos: String(m.partOfSpeech || '').toLowerCase(),
+        defs: (m.definitions || []).map(d => stripHtml(d.definition)).filter(Boolean).slice(0, 2)
+      })).filter(m => m.defs.length);
+      if (meanings.length) return { headword: w, phonetic: '', meanings };
+    }
+    return null;
+  }
+
+  // 先查 Free Dictionary，查不到或連不上再查 Wiktionary
+  async function lookup(word) {
+    let failed = 0;
+    for (const fn of [lookupFreeDict, lookupWiktionary]) {
+      try {
+        const r = await fn(word);
+        if (r) return r;
+      } catch {
+        failed++;
+      }
+    }
+    if (failed === 2) throw new Error('字典暫時連不上');
+    return null;
+  }
+
+  // 翻譯：優先用自己的 Apps Script（Google 翻譯，繁體中文），失敗再用 MyMemory
   async function translate(text) {
-    const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0, 450))}&langpair=en|zh-TW`);
-    const data = await res.json();
-    if (Number(data.responseStatus) !== 200) throw new Error(data.responseDetails || '翻譯服務暫時無法使用');
-    return String(data.responseData?.translatedText || '').trim();
+    const q = String(text).slice(0, 900);
+    if (!DataStore.isDemo()) {
+      try {
+        const { data } = await fetchJSON(`${CONFIG.SHEET_API_URL}?translate=${encodeURIComponent(q)}`, 10000);
+        if (data && data.ok && data.text) return String(data.text).trim();
+      } catch { /* 換備援 */ }
+    }
+    try {
+      const { data } = await fetchJSON(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(q.slice(0, 450))}&langpair=en|zh-TW`, 8000);
+      if (data && Number(data.responseStatus) === 200 && data.responseData?.translatedText) {
+        return String(data.responseData.translatedText).trim();
+      }
+    } catch { /* 都失敗 */ }
+    throw new Error('翻譯暫時無法使用');
   }
 
   const POS = { noun: '名詞', verb: '動詞', adjective: '形容詞', adverb: '副詞', pronoun: '代名詞', preposition: '介系詞', conjunction: '連接詞', interjection: '感嘆詞' };
@@ -314,10 +370,17 @@
         sheet.querySelector('#sh-close').onclick = closeSheet;
         sheet.querySelector('#sh-speak').onclick = () => speak(existing ? existing.word : (current.info?.headword || word));
         sheet.querySelector('#sh-trans').onclick = async e => {
-          e.target.disabled = true;
+          const btn = e.target;
           const out = sheet.querySelector('#sh-trans-out');
+          btn.disabled = true;
           out.textContent = '翻譯中…';
-          try { out.textContent = await translate(sentence); } catch (err) { out.textContent = err.message; }
+          try {
+            out.textContent = await translate(sentence);
+            btn.hidden = true;
+          } catch (err) {
+            out.textContent = `${err.message}，可以再按一次重試。`;
+            btn.disabled = false;
+          }
         };
 
         const addBtn = sheet.querySelector('#sh-add');
@@ -356,21 +419,48 @@
         });
 
         if (existing) return;
-        // 同時查字典與中文翻譯
-        const [info, zh] = await Promise.all([lookup(word), translate(word).catch(() => '')]);
-        if (current.word !== word || sheet.hidden) return;   // 使用者已經點了別的字
-        current.info = info;
-        if (info) {
-          sheet.querySelector('.sheet-word').textContent = info.headword;
-          sheet.querySelector('#sh-phon').textContent = info.phonetic;
-          sheet.querySelector('#sh-defs').innerHTML = info.meanings.map(m =>
-            `<p><span class="tag">${esc(posLabel(m.pos))}</span> ${esc(m.defs.join(' / '))}</p>`).join('');
-        } else {
-          sheet.querySelector('#sh-defs').textContent = '字典裡查不到這個字，可以自己填中文意思再加入。';
-        }
+
+        // 字典與翻譯各自載入：其中一個慢或失敗，不影響另一個
+        const mine = current;
+        const stillHere = () => current === mine && !sheet.hidden;
+        const defsEl = sheet.querySelector('#sh-defs');
         const input = sheet.querySelector('#sh-meaning');
-        input.placeholder = '自己填寫中文意思';
-        if (!input.value && zh && zh.toLowerCase() !== word) input.value = zh;
+
+        const loadDefs = async () => {
+          defsEl.textContent = '查詢中…';
+          try {
+            const info = await lookup(word);
+            if (!stillHere()) return;
+            mine.info = info;
+            if (info) {
+              sheet.querySelector('.sheet-word').textContent = info.headword;
+              sheet.querySelector('#sh-phon').textContent = info.phonetic;
+              defsEl.innerHTML = info.meanings.map(m =>
+                `<p><span class="tag">${esc(posLabel(m.pos))}</span> ${esc(m.defs.join(' / '))}</p>`).join('');
+            } else {
+              defsEl.textContent = '字典裡查不到這個字，可以自己填中文意思再加入。';
+            }
+          } catch (err) {
+            if (!stillHere()) return;
+            defsEl.innerHTML = `${esc(err.message)}。<button class="link-btn" type="button">重試</button>`;
+            defsEl.querySelector('button').onclick = loadDefs;
+          }
+        };
+
+        const loadZh = async () => {
+          input.placeholder = '翻譯中…';
+          try {
+            const zh = await translate(word);
+            if (!stillHere()) return;
+            if (!input.value && zh && zh.toLowerCase() !== word) input.value = zh;
+            input.placeholder = '自己填寫中文意思';
+          } catch {
+            if (stillHere()) input.placeholder = '自動翻譯失敗，請自己填寫';
+          }
+        };
+
+        loadDefs();
+        loadZh();
       };
 
       box.querySelector('.en-body').addEventListener('click', e => {
@@ -460,10 +550,18 @@
         const word = form.word.value.trim().toLowerCase();
         if (!word) return form.word.focus();
         out.textContent = '查詢中…';
-        const [res, zh] = await Promise.all([lookup(word), translate(word).catch(() => '')]);
-        info = res;
-        if (!form.meaning.value && zh && zh.toLowerCase() !== word) form.meaning.value = zh;
-        out.textContent = res ? `${res.headword} ${res.phonetic}　${defText(res)}` : '字典裡查不到這個字，可以直接填中文意思加入。';
+        form.meaning.placeholder = '翻譯中…';
+        const zhTask = translate(word)
+          .then(zh => { if (!form.meaning.value && zh && zh.toLowerCase() !== word) form.meaning.value = zh; })
+          .catch(() => { form.meaning.placeholder = '自動翻譯失敗，請自己填寫'; });
+        try {
+          info = await lookup(word);
+          out.textContent = info ? `${info.headword} ${info.phonetic}　${defText(info)}` : '字典裡查不到這個字，可以直接填中文意思加入。';
+        } catch (err) {
+          info = null;
+          out.textContent = `${err.message}，可以直接填中文意思加入。`;
+        }
+        await zhTask;
       };
 
       form.onsubmit = Portal.action(async e => {

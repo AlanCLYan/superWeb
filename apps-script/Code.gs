@@ -81,9 +81,18 @@ function setup() {
 }
 
 // ============================================================
-// 讀取：GET ?sheet=routes
+// 讀取：GET ?sheet=routes　／　翻譯：GET ?translate=text
 // ============================================================
 function doGet(e) {
+  // 翻譯：GET ?translate=英文 → 繁體中文（使用 Google 翻譯，英文閱讀查單字用）
+  if (e && e.parameter && e.parameter.translate) {
+    try {
+      const text = String(e.parameter.translate).slice(0, 1000);
+      return json_({ ok: true, text: LanguageApp.translate(text, 'en', 'zh-TW') });
+    } catch (err) {
+      return json_({ ok: false, error: '翻譯失敗：' + err.message });
+    }
+  }
   const name = e && e.parameter && e.parameter.sheet;
   if (!SCHEMA[name]) return json_({ ok: false, error: '找不到工作表：' + name });
   return json_(readRows_(name));
