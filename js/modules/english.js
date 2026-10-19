@@ -78,32 +78,59 @@
 
   const stripHtml = html => new DOMParser().parseFromString(String(html || ''), 'text/html').body.textContent.trim();
 
-  // 字典 1：Free Dictionary API（有音標）
+  // 每個「意思」(sense) 的格式：
+  //   { pos: 詞性, def: 英文解釋, example: 例句, synonyms: [同義字], zh: 中文解釋, exampleZh: 例句中文 }
+  const MAX_SENSES = 4;
+
+  // 字典 1：Free Dictionary API（有音標、例句、同義字）
   async function lookupFreeDict(word) {
     for (const w of [word, ...stems(word)]) {
       const { res, data } = await fetchJSON(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(w)}`, 7000);
       if (!res.ok || !Array.isArray(data)) continue;
       const entry = data[0];
       const phonetic = entry.phonetic || (entry.phonetics || []).map(p => p.text).find(Boolean) || '';
-      const meanings = (entry.meanings || []).slice(0, 3).map(m => ({
-        pos: m.partOfSpeech,
-        defs: (m.definitions || []).slice(0, 2).map(d => d.definition)
-      }));
-      return { headword: entry.word || w, phonetic, meanings };
+      // 同一詞性可能分散在多個條目，先合併
+      const byPos = new Map();
+      for (const e of data) for (const m of e.meanings || []) {
+        const cur = byPos.get(m.partOfSpeech) || { defs: [], synonyms: [] };
+        cur.defs.push(...(m.definitions || []));
+        cur.synonyms.push(...(m.synonyms || []));
+        byPos.set(m.partOfSpeech, cur);
+      }
+      const senses = [];
+      for (const [pos, { defs, synonyms }] of byPos) {
+        if (!defs.length) continue;
+        // 每個詞性取最常用的第一個意思，再補一個有例句的意思
+        const picked = [defs[0], defs.slice(1).find(d => d.example)].filter(Boolean);
+        picked.forEach((d, i) => senses.push({
+          pos,
+          def: d.definition,
+          example: d.example || '',
+          synonyms: i === 0 ? [...new Set([...(d.synonyms || []), ...synonyms])].slice(0, 4) : (d.synonyms || []).slice(0, 4)
+        }));
+      }
+      if (senses.length) return { headword: entry.word || w, phonetic, senses: senses.slice(0, MAX_SENSES) };
     }
     return null;
   }
 
-  // 字典 2：Wiktionary（備援）
+  // 字典 2：Wiktionary（備援，也有例句）
   async function lookupWiktionary(word) {
     for (const w of [word, ...stems(word)]) {
       const { res, data } = await fetchJSON(`https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(w)}`, 7000);
       if (!res.ok || !data || !Array.isArray(data.en)) continue;
-      const meanings = data.en.slice(0, 3).map(m => ({
-        pos: String(m.partOfSpeech || '').toLowerCase(),
-        defs: (m.definitions || []).map(d => stripHtml(d.definition)).filter(Boolean).slice(0, 2)
-      })).filter(m => m.defs.length);
-      if (meanings.length) return { headword: w, phonetic: '', meanings };
+      const senses = [];
+      for (const m of data.en) {
+        const defs = (m.definitions || [])
+          .map(d => ({
+            def: stripHtml(d.definition),
+            example: stripHtml((d.parsedExamples && d.parsedExamples[0] && d.parsedExamples[0].example) || (d.examples || [])[0] || '')
+          }))
+          .filter(d => d.def);
+        const picked = [defs[0], defs.slice(1).find(d => d.example)].filter(Boolean);
+        picked.forEach(d => senses.push({ pos: String(m.partOfSpeech || '').toLowerCase(), def: d.def, example: d.example, synonyms: [] }));
+      }
+      if (senses.length) return { headword: w, phonetic: '', senses: senses.slice(0, MAX_SENSES) };
     }
     return null;
   }
@@ -141,9 +168,79 @@
     throw new Error('翻譯暫時無法使用');
   }
 
-  const POS = { noun: '名詞', verb: '動詞', adjective: '形容詞', adverb: '副詞', pronoun: '代名詞', preposition: '介系詞', conjunction: '連接詞', interjection: '感嘆詞' };
+  // 把每個意思的英文解釋與例句一次翻成中文（編號對應，只呼叫一次翻譯）
+  async function enrichSenses(senses) {
+    const lines = [];
+    const slots = [];
+    senses.forEach((sense, i) => {
+      slots.push([i, 'zh']);
+      lines.push(`${slots.length}. ${sense.def}`);
+      if (sense.example) {
+        slots.push([i, 'exampleZh']);
+        lines.push(`${slots.length}. ${sense.example}`);
+      }
+    });
+    // 太長時只翻譯解釋，不翻例句
+    let text = lines.join('\n');
+    if (text.length > 880) {
+      const defsOnly = slots.map((sl, k) => [sl, lines[k]]).filter(([sl]) => sl[1] === 'zh');
+      slots.length = 0; lines.length = 0;
+      defsOnly.forEach(([sl, line]) => { slots.push(sl); lines.push(`${slots.length}. ${line.replace(/^\d+\.\s*/, '')}`); });
+      text = lines.join('\n');
+    }
+    const out = await translate(text);
+    for (const line of out.split(/\n+/)) {
+      const m = line.match(/^\s*(\d+)\s*[.．、:：)）]\s*(.+)$/);
+      if (!m) continue;
+      const slot = slots[Number(m[1]) - 1];
+      if (slot) senses[slot[0]][slot[1]] = m[2].trim();
+    }
+    return senses;
+  }
+
+  const POS = {
+    noun: '名詞', verb: '動詞', adjective: '形容詞', adverb: '副詞', pronoun: '代名詞',
+    preposition: '介系詞', conjunction: '連接詞', interjection: '感嘆詞', determiner: '限定詞',
+    article: '冠詞', numeral: '數詞', phrase: '片語', idiom: '慣用語', prefix: '字首', suffix: '字尾', abbreviation: '縮寫'
+  };
+  const POS_SHORT = { noun: 'n.', verb: 'v.', adjective: 'adj.', adverb: 'adv.', pronoun: 'pron.', preposition: 'prep.', conjunction: 'conj.', interjection: 'interj.' };
   const posLabel = p => POS[p] || p || '';
-  const defText = info => info ? info.meanings.map(m => `(${m.pos}) ${m.defs[0] || ''}`).join('；') : '';
+  const defText = info => info ? info.senses.map(x => `(${POS_SHORT[x.pos] || x.pos}) ${x.def}`).join('；') : '';
+  const posList = info => info ? [...new Set(info.senses.map(x => x.pos))].join(', ') : '';
+  const parseSenses = v => {
+    try {
+      const arr = JSON.parse(v.senses || '[]');
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
+    }
+  };
+
+  // 顯示詞性、中英解釋、例句、同義字
+  function renderSenses(senses, word = '') {
+    if (!senses || !senses.length) return '';
+    const mark = text => {
+      const safe = esc(text);
+      if (!word) return safe;
+      const re = new RegExp(`\\b(${word.replace(/[^a-z'’-]/gi, '')}[a-z]*)\\b`, 'gi');
+      return safe.replace(re, '<b>$1</b>');
+    };
+    let lastPos = null;
+    return `<ol class="senses">${senses.map(x => {
+      const showPos = x.pos !== lastPos;
+      lastPos = x.pos;
+      return `
+        <li class="${showPos ? 'new-pos' : ''}">
+          <span class="sense-pos">${showPos ? `<span class="tag">${esc(posLabel(x.pos))}</span>` : ''}</span>
+          <div class="sense-body">
+            ${x.zh ? `<p class="sense-zh">${esc(x.zh)}</p>` : ''}
+            <p class="sense-en" lang="en">${esc(x.def)}</p>
+            ${x.example ? `<p class="sense-ex"><span class="ex-label">例</span><span><span lang="en">${mark(x.example)}</span>${x.exampleZh ? `<br><span class="sense-exzh">${esc(x.exampleZh)}</span>` : ''}</span></p>` : ''}
+            ${x.synonyms && x.synonyms.length ? `<p class="sense-syn"><span class="ex-label">同義</span><span lang="en">${esc(x.synonyms.join(', '))}</span></p>` : ''}
+          </div>
+        </li>`;
+    }).join('')}</ol>`;
+  }
 
   // ---------- 文章斷句、斷字 ----------
   const WORD_RE = /[A-Za-z]+(?:['’-][A-Za-z]+)*/g;
@@ -352,7 +449,7 @@
             </div>
             <button class="icon-btn" id="sh-close" aria-label="關閉">✕</button>
           </div>
-          <div id="sh-defs" class="sheet-defs muted small">${existing ? esc(existing.definition || '') : '查詢中…'}</div>
+          <div id="sh-defs" class="sheet-defs">${existing ? (renderSenses(parseSenses(existing), existing.word) || `<p class="muted small">${esc(existing.definition || '')}</p>`) : '<p class="muted small">查詢中…</p>'}</div>
           <label class="sheet-label">中文意思
             <input id="sh-meaning" value="${esc(existing?.meaning || '')}" placeholder="${existing ? '' : '翻譯中…'}">
           </label>
@@ -385,17 +482,23 @@
 
         const addBtn = sheet.querySelector('#sh-add');
         if (addBtn) addBtn.onclick = Portal.action(async () => {
-          const info = current.info;
-          const headword = (info?.headword || word).toLowerCase();
-          if (this.cache.vocab.some(v => String(v.word).toLowerCase() === headword)) throw new Error(`「${headword}」已經在單字庫裡`);
           addBtn.disabled = true;
           addBtn.textContent = '儲存中…';
+          if (current.enriching) await current.enriching.catch(() => {});
+          const info = current.info;
+          const headword = (info?.headword || word).toLowerCase();
+          if (this.cache.vocab.some(v => String(v.word).toLowerCase() === headword)) {
+            addBtn.disabled = false;
+            addBtn.textContent = '加入單字庫';
+            throw new Error(`「${headword}」已經在單字庫裡`);
+          }
           const row = await DataStore.add('vocab', {
             word: headword,
             meaning: sheet.querySelector('#sh-meaning').value.trim(),
             definition: defText(info),
             phonetic: info?.phonetic || '',
-            pos: info ? info.meanings.map(m => m.pos).join(', ') : '',
+            pos: posList(info),
+            senses: JSON.stringify(info?.senses || []),
             example: sentence,
             source: article.title,
             sourceUrl: article.url,
@@ -427,22 +530,29 @@
         const input = sheet.querySelector('#sh-meaning');
 
         const loadDefs = async () => {
-          defsEl.textContent = '查詢中…';
+          defsEl.innerHTML = '<p class="muted small">查詢中…</p>';
           try {
             const info = await lookup(word);
             if (!stillHere()) return;
             mine.info = info;
-            if (info) {
-              sheet.querySelector('.sheet-word').textContent = info.headword;
-              sheet.querySelector('#sh-phon').textContent = info.phonetic;
-              defsEl.innerHTML = info.meanings.map(m =>
-                `<p><span class="tag">${esc(posLabel(m.pos))}</span> ${esc(m.defs.join(' / '))}</p>`).join('');
-            } else {
-              defsEl.textContent = '字典裡查不到這個字，可以自己填中文意思再加入。';
+            if (!info) {
+              defsEl.innerHTML = '<p class="muted small">字典裡查不到這個字，可以自己填中文意思再加入。</p>';
+              return;
+            }
+            sheet.querySelector('.sheet-word').textContent = info.headword;
+            sheet.querySelector('#sh-phon').textContent = info.phonetic;
+            defsEl.innerHTML = renderSenses(info.senses, info.headword) + '<p class="muted small sense-note">中文解釋翻譯中…</p>';
+            // 再把每個意思和例句翻成中文
+            mine.enriching = enrichSenses(info.senses);
+            try {
+              await mine.enriching;
+              if (stillHere()) defsEl.innerHTML = renderSenses(info.senses, info.headword);
+            } catch {
+              if (stillHere()) defsEl.innerHTML = renderSenses(info.senses, info.headword) + '<p class="muted small sense-note">中文解釋暫時無法取得</p>';
             }
           } catch (err) {
             if (!stillHere()) return;
-            defsEl.innerHTML = `${esc(err.message)}。<button class="link-btn" type="button">重試</button>`;
+            defsEl.innerHTML = `<p class="muted small">${esc(err.message)}。<button class="link-btn" type="button">重試</button></p>`;
             defsEl.querySelector('button').onclick = loadDefs;
           }
         };
@@ -508,7 +618,7 @@
             <button class="btn btn-ghost" type="button" id="auto">查詢</button>
             <button class="btn" type="submit">加入</button>
           </form>
-          <p class="muted small" id="auto-out"></p>
+          <div id="auto-out" class="auto-out"></div>
         </section>
 
         <div class="toolbar">
@@ -530,8 +640,11 @@
                   <button class="icon-btn" data-speak="${esc(v.word)}" title="發音">🔊</button>
                   ${dots(v)}
                 </div>
-                <p class="vocab-meaning">${esc(v.meaning || '（尚未填寫中文）')}</p>
-                ${v.definition ? `<p class="muted small" lang="en">${esc(v.definition)}</p>` : ''}
+                <p class="vocab-meaning">${[...new Set(parseSenses(v).map(x => x.pos))].map(pos => `<span class="tag">${esc(posLabel(pos))}</span>`).join(' ')} ${esc(v.meaning || '（尚未填寫中文）')}</p>
+                ${parseSenses(v).length
+                  ? `<details class="vocab-senses"><summary>詞性、解釋與例句</summary>${renderSenses(parseSenses(v), v.word)}</details>`
+                  : `${v.definition ? `<p class="muted small" lang="en">${esc(v.definition)}</p>` : ''}
+                     <button class="link-btn small" data-enrich="${esc(v.id)}">補上詞性與例句</button>`}
                 ${v.example ? `<p class="vocab-example small" lang="en">${esc(v.example)}</p>` : ''}
                 <p class="muted small">${v.sourceUrl ? `<a href="${esc(v.sourceUrl)}" target="_blank" rel="noopener">${esc(v.source || '文章')}</a>` : esc(v.source || '生活')}・${dateOf(v.createdAt)}</p>
               </div>
@@ -549,17 +662,24 @@
       box.querySelector('#auto').onclick = async () => {
         const word = form.word.value.trim().toLowerCase();
         if (!word) return form.word.focus();
-        out.textContent = '查詢中…';
+        out.innerHTML = '<p class="muted small">查詢中…</p>';
         form.meaning.placeholder = '翻譯中…';
         const zhTask = translate(word)
           .then(zh => { if (!form.meaning.value && zh && zh.toLowerCase() !== word) form.meaning.value = zh; })
           .catch(() => { form.meaning.placeholder = '自動翻譯失敗，請自己填寫'; });
         try {
           info = await lookup(word);
-          out.textContent = info ? `${info.headword} ${info.phonetic}　${defText(info)}` : '字典裡查不到這個字，可以直接填中文意思加入。';
+          if (!info) {
+            out.innerHTML = '<p class="muted small">字典裡查不到這個字，可以直接填中文意思加入。</p>';
+          } else {
+            const head = `<p class="auto-head"><strong lang="en">${esc(info.headword)}</strong> <span class="muted">${esc(info.phonetic)}</span></p>`;
+            out.innerHTML = head + renderSenses(info.senses, info.headword);
+            await enrichSenses(info.senses).catch(() => {});
+            out.innerHTML = head + renderSenses(info.senses, info.headword);
+          }
         } catch (err) {
           info = null;
-          out.textContent = `${err.message}，可以直接填中文意思加入。`;
+          out.innerHTML = `<p class="muted small">${esc(err.message)}，可以直接填中文意思加入。</p>`;
         }
         await zhTask;
       };
@@ -573,7 +693,8 @@
           meaning: form.meaning.value.trim(),
           definition: info && info.headword.toLowerCase() === word ? defText(info) : '',
           phonetic: info?.phonetic || '',
-          pos: info ? info.meanings.map(m => m.pos).join(', ') : '',
+          pos: posList(info),
+          senses: info && info.headword.toLowerCase() === word ? JSON.stringify(info.senses) : '[]',
           example: form.example.value.trim(),
           source: '生活', sourceUrl: '',
           createdAt: new Date().toISOString(),
@@ -598,6 +719,31 @@
       box.querySelector('#vs').onchange = e => { f.status = e.target.value; this.renderVocab(box); };
 
       box.querySelectorAll('[data-speak]').forEach(b => b.onclick = () => speak(b.dataset.speak));
+      // 舊單字補上詞性、中英解釋與例句
+      box.querySelectorAll('[data-enrich]').forEach(b => b.onclick = Portal.action(async () => {
+        const v = this.cache.vocab.find(x => x.id === b.dataset.enrich);
+        b.disabled = true;
+        b.textContent = '查詢中…';
+        let info;
+        try {
+          info = await lookup(String(v.word).toLowerCase());
+        } finally {
+          b.disabled = false;
+          b.textContent = '補上詞性與例句';
+        }
+        if (!info) throw new Error(`字典裡查不到「${v.word}」`);
+        b.textContent = '翻譯中…';
+        await enrichSenses(info.senses).catch(() => {});
+        Object.assign(v, {
+          senses: JSON.stringify(info.senses),
+          pos: posList(info),
+          definition: v.definition || defText(info),
+          phonetic: v.phonetic || info.phonetic
+        });
+        await DataStore.update('vocab', v);
+        this.renderVocab(box);
+      }));
+
       box.querySelectorAll('[data-edit]').forEach(b => b.onclick = Portal.action(async () => {
         const v = this.cache.vocab.find(x => x.id === b.dataset.edit);
         const meaning = prompt(`「${v.word}」的中文意思：`, v.meaning || '');
@@ -667,7 +813,7 @@
           ${r.flipped ? `
             <div class="flash-back">
               <p class="flash-meaning">${esc(v.meaning || '（尚未填寫中文）')}</p>
-              ${v.definition ? `<p class="muted small" lang="en">${esc(v.definition)}</p>` : ''}
+              ${renderSenses(parseSenses(v), v.word) || (v.definition ? `<p class="muted small" lang="en">${esc(v.definition)}</p>` : '')}
               ${v.example ? `<p class="vocab-example small" lang="en">${esc(v.example)}</p>` : ''}
             </div>` : ''}
         </section>

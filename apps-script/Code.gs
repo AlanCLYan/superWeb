@@ -33,8 +33,10 @@ const SCHEMA = {
   articles:  ['id', 'title', 'author', 'source', 'url', 'publishedAt', 'fetchedAt', 'body', 'words', 'counter', 'readAt'],
   // 英文閱讀：單字庫
   //   box / nextReview：間隔複習用（box 越大代表越熟，nextReview 是下次該複習的日期）
+  //   senses：每個意思的詞性、中英文解釋、例句與同義字
   vocab:     ['id', 'word', 'meaning', 'definition', 'phonetic', 'pos', 'example', 'source', 'sourceUrl',
-              'createdAt', 'box', 'nextReview', 'correct', 'wrong', 'lastReviewed']
+              'createdAt', 'box', 'nextReview', 'correct', 'wrong', 'lastReviewed',
+              'senses']   // senses：詞性、中英解釋、例句（JSON 格式）
 };
 
 // 這些欄位讀出來時轉成數字，其他一律當文字
