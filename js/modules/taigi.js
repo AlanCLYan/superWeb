@@ -45,6 +45,13 @@
     return { entry, answer: cands[0], cands, sentence: '' };   // 沒有可挖空的句子時，只看華語作答
   }
 
+  // 「2 個字」或「2～3 個字」（有可省略的字時）
+  function lengthHint(cands) {
+    const lens = cands.map(c => [...c].length);
+    const min = Math.min(...lens), max = Math.max(...lens);
+    return min === max ? `${min} 個字` : `${min}～${max} 個字`;
+  }
+
   const normalize = s => String(s).replace(/[\s（）()／/]/g, '');
   const statusOf = p => !p ? 'new' : p.masteredAt ? 'done' : 'learning';
 
@@ -200,7 +207,7 @@
             </div>
             <button class="link-btn small" id="giveup">不會，看答案</button>` : `
             <form id="tg-form" class="spell-row">
-              <input name="answer" autocomplete="off" placeholder="填入台語用字（${[...q.answer].length} 個字）">
+              <input name="answer" autocomplete="off" placeholder="填入台語用字（${lengthHint(q.cands)}）">
               <button class="btn" type="submit">確認</button>
             </form>
             <button class="link-btn small" id="giveup">不會，看答案</button>`) : `
@@ -251,8 +258,9 @@
           ev.preventDefault();
           const v = normalize(form.answer.value);
           if (!v) return form.answer.focus();
-          // 要填的是空格裡的那個寫法（例如「敏豆仔」；輸入「敏豆（仔）」也算對）
-          const ok = v === normalize(q.answer);
+          // 括號內的字可打可不打：「敏豆（仔）」打「敏豆」或「敏豆仔」都算對；
+          // 有斜線的「尾蝶（仔）/（尾）蝶仔」任何一種寫法都算對
+          const ok = q.cands.some(c => normalize(c) === v);
           answer(ok, form.answer.value.trim());
         };
       }
