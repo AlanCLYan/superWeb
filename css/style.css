@@ -472,3 +472,57 @@ a.btn:hover { text-decoration: none; }
 .auto-head strong { font-family: var(--read-font); font-size: 1.2rem; }
 .flash-back { text-align: left; }
 .flash-back .flash-meaning { text-align: center; }
+
+/* =============================================
+   台語用字
+   ============================================= */
+.tg-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--border); max-width: 640px; }
+.tg-bar .done { background: var(--good); }
+.tg-bar .learning { background: var(--accent); }
+.tg-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 18px; color: var(--muted); }
+.tg-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--border); margin-right: 5px; vertical-align: 0; }
+.tg-legend i.done { background: var(--good); }
+.tg-legend i.learning { background: var(--accent); }
+.tg-card { max-width: 640px; padding: 20px 22px 24px; }
+.tg-mode { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.tg-mode .tab[disabled] { cursor: default; }
+.tg-dots { display: inline-flex; gap: 5px; }
+.tg-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+.tg-dots i.on { background: var(--good); }
+.tg-q, .tg-answer { display: grid; grid-template-columns: 5.5em 1fr; gap: 10px 12px; margin: 0 0 18px; align-items: baseline; }
+.tg-q dt, .tg-answer dt { color: var(--muted); font-size: .85rem; }
+.tg-q dd, .tg-answer dd { margin: 0; }
+.tg-zh { font-size: 1.15rem; font-weight: 600; }
+.tg-sentence { font-size: 1.45rem; line-height: 1.7; letter-spacing: .02em; }
+.tg-blank {
+  display: inline-block; min-width: 1.6em; padding: 0 .15em; margin: 0 .1em; text-align: center;
+  border-bottom: 2px solid var(--accent); color: var(--accent); letter-spacing: 0;
+}
+.tg-blank.ok { color: var(--good); border-color: var(--good); font-weight: 700; }
+.tg-blank.no { color: #dc2626; border-color: #dc2626; font-weight: 700; }
+@media (prefers-color-scheme: dark) { .tg-blank.no { color: #f87171; border-color: #f87171; } }
+.tg-options { grid-template-columns: repeat(2, 1fr); }
+.tg-options .quiz-opt { text-align: center; font-size: 1.25rem; }
+#tg-form input { font-family: inherit; font-size: 1.25rem; }
+#giveup { display: block; margin-top: 10px; }
+.tg-result { margin: 18px 0 14px; padding: 14px 16px; border-radius: 12px; background: var(--bg); border-left: 4px solid var(--good); }
+.tg-result.no { border-left-color: #dc2626; }
+.tg-verdict { margin: 0 0 12px; font-weight: 600; }
+.tg-result.ok .tg-verdict { color: var(--good); }
+.tg-result.no .tg-verdict { color: #dc2626; }
+@media (prefers-color-scheme: dark) { .tg-result.no { border-left-color: #f87171; } .tg-result.no .tg-verdict { color: #f87171; } }
+.tg-answer { margin: 0; gap: 6px 12px; }
+.tg-word { font-size: 1.35rem; font-weight: 700; }
+.tg-pron { font-size: 1.1rem; }
+.tg-card .btn-big { width: 100%; }
+.tg-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--border); }
+.tg-item { display: grid; grid-template-columns: 3em 1fr auto; gap: 10px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+.tg-item p { margin: 0; }
+.tg-no { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .85rem; }
+.tg-item-word { font-size: 1.1rem; }
+.tg-side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.tg-item.done .tg-item-word { color: var(--good); }
+@media (max-width: 560px) {
+  .tg-sentence { font-size: 1.25rem; }
+  .tg-q, .tg-answer { grid-template-columns: 4.5em 1fr; }
+}

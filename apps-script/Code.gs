@@ -36,11 +36,14 @@ const SCHEMA = {
   //   senses：每個意思的詞性、中英文解釋、例句與同義字
   vocab:     ['id', 'word', 'meaning', 'definition', 'phonetic', 'pos', 'example', 'source', 'sourceUrl',
               'createdAt', 'box', 'nextReview', 'correct', 'wrong', 'lastReviewed',
-              'senses']   // senses：詞性、中英解釋、例句（JSON 格式）
+              'senses'],  // senses：詞性、中英解釋、例句（JSON 格式）
+  // 台語用字 700 字：每個字詞的練習進度（id 是字表編號，例如 003）
+  //   streak：目前連續答對次數（答錯歸零），masteredAt：連續答對 5 次的時間
+  taigi:     ['id', 'streak', 'correct', 'wrong', 'lastAt', 'masteredAt']
 };
 
 // 這些欄位讀出來時轉成數字，其他一律當文字
-const NUMBER_FIELDS = ['target', 'price', 'minPrice', 'stops', 'words', 'box', 'correct', 'wrong'];
+const NUMBER_FIELDS = ['target', 'price', 'minPrice', 'stops', 'words', 'box', 'correct', 'wrong', 'streak'];
 
 // 刪除航線時，一併刪除這些工作表中屬於該航線的資料
 const ROUTE_CHILDREN = ['prices', 'history'];
